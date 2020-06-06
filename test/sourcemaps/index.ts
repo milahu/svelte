@@ -25,9 +25,24 @@ describe('sourcemaps', () => {
 				`${__dirname}/samples/${dir}/output`
 			);
 
+			const preprocessorFilename = path.resolve(
+				`${__dirname}/samples/${dir}/_preprocessor.js`
+			)
+
 			const input = fs.readFileSync(filename, 'utf-8').replace(/\s+$/, '');
-			const { js, css } = svelte.compile(input, {
+			let processed_input = input;
+			let processed_map = null;
+
+			if (fs.existsSync(preprocessorFilename)) {
+				let { preprocessors } = require(preprocessorFilename);
+				if (preprocessors.length > 0) {
+					({ code: processed_input, map: processed_map } = await svelte.preprocess(input, preprocessors, { filename: 'input.svelte' }));
+				}
+			}
+			
+			const { js, css } = svelte.compile(processed_input, {
 				filename,
+				sourceMap: processed_map,
 				outputFilename: `${outputFilename}.js`,
 				cssOutputFilename: `${outputFilename}.css`
 			});
