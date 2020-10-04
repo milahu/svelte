@@ -367,20 +367,6 @@ export default class Component {
 							'or disable this warning with svelte.compile(_, _, { sourcemapEncodedWarn: false })'
 						);
 					}
-					Object.defineProperties(js.map, {
-						toString: {
-							enumerable: false,
-							value: function toString() {
-								return JSON.stringify(this);
-							}
-						},
-						toUrl: {
-							enumerable: false,
-							value: function toUrl() {
-								return 'data:application/json;charset=utf-8;base64,' + btoa(this.toString());
-							}
-						}
-					});
 				}
 				if (css.map) {
 					css.map = combine_sourcemaps(
@@ -408,6 +394,9 @@ export default class Component {
 			if (css.map && typeof(css.map.mappings) == 'object') {
 				(css.map as RawSourceMap).mappings = encode_mappings(css.map.mappings);
 			}
+
+			// TODO css.map.version is undefined, should be 3 -> test sourcemaps/css is failing
+			// TODO verify js.map.version == 3
 
 		}
 
