@@ -114,13 +114,11 @@ export default async function preprocess(
 	preprocessor: PreprocessorGroup | PreprocessorGroup[],
 	options?: {
 		filename?: string,
-		sourcemapWarnLoss?: number, // default 0.5
 		sourcemapEncodedWarn?: boolean // default true
 	}
 ) {
 	// @ts-ignore todo: doublecheck
 	const filename = (options && options.filename) || preprocessor.filename; // legacy
-	const sourcemapWarnLoss = (options && options.sourcemapWarnLoss != undefined) ? options.sourcemapWarnLoss : 0.5;
 	const sourcemapEncodedWarn = (options && options.sourcemapEncodedWarn != undefined) ? options.sourcemapEncodedWarn : true;
 
 	const dependencies = [];
@@ -227,7 +225,6 @@ export default async function preprocess(
 	}
 
 	const map_stats: combine_sourcemaps_map_stats = {
-		sourcemapWarnLoss,
 		sourcemapEncodedWarn
 		// property `result` is set by combine_sourcemaps
 	};
@@ -241,18 +238,6 @@ export default async function preprocess(
 	) as DecodedSourceMap;
 
 	// TODO better than console.log?
-
-	if (map_stats.result && map_stats.result.segments_lost) {
-		const { segment_loss_per_map, segments_per_map } = map_stats.result;
-		console.log('warning. svelte.preprocess seems to receive low-resolution sourcemaps. '+
-			'relative segment loss per combine_sourcemaps step: '+
-			segment_loss_per_map.map(f => f.toFixed(2)).join(' -> ')+
-			'. absolute number of segments per sourcemap: '+
-			segments_per_map.join(' -> ')+
-			'. make your preprocessors return high-resolution sourcemaps '+
-			'or increase the tolerated loss with svelte.preprocess(_, _, { sourcemapWarnLoss: 0.8 })'
-		);
-	}
 
 	if (map_stats.result && map_stats.result.maps_encoded && map_stats.result.maps_encoded.length > 0) {
 		console.log('warning. svelte.preprocess received encoded sourcemaps (index '+

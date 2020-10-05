@@ -58,7 +58,7 @@ describe("sourcemaps", () => {
 				sourcemap: preprocessed.map,
 				// filenames for sourcemaps
 				outputFilename: `${outputName}.js`,
-				cssOutputFilename: `${outputName}.css`,
+				cssOutputFilename: `${outputName}.css`
 			});
 
 			js.code = js.code.replace(
@@ -102,7 +102,7 @@ describe("sourcemaps", () => {
 					css.map.sources.slice().sort(),
 					(config.css_map_sources || ["input.svelte"]).sort()
 				);
-			};
+			}
 
 			// stupid workaround (unnecessary encode + decode steps)
 			// TODO find a SourceMapConsumer who also consumes decoded mappings

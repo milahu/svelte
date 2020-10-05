@@ -323,6 +323,9 @@ export default class Component {
 				? { code: null, map: null }
 				: result.css; // css.map.mappings are decoded
 
+			// TODO remove workaround. type DecodedMappings of magic-string should have version - required by SourceMapConsumer
+			if (css.map) (css.map as any).version = 3;
+
 			js = print(program, {
 				sourceMapSource: compile_options.filename
 			});
@@ -343,24 +346,23 @@ export default class Component {
 			];
 
 			// combine sourcemaps
-			const map_stats: combine_sourcemaps_map_stats = {
-				sourcemapWarnLoss: 0, // segment loss is usually high, so we ignore
-				sourcemapEncodedWarn: true // TODO config
-				// property `result` is set by combine_sourcemaps
-			};
-
 			if (compile_options.sourcemap) {
+				const sourcemapEncodedWarn = (compile_options.sourcemapEncodedWarn != undefined) ? compile_options.sourcemapEncodedWarn : true;
+				const map_stats: combine_sourcemaps_map_stats = {
+					sourcemapEncodedWarn
+					// property `result` is set by combine_sourcemaps
+				};
+
 				if (js.map) {
 					js.map = combine_sourcemaps(
 						this.file,
-						[
-							js.map, // idx 1: internal
-							compile_options.sourcemap // idx 0: external: svelte.preprocess, etc
-						],
+						[ js.map, compile_options.sourcemap ],
 						map_stats
 					) as RawSourceMap;
 					sourcemap_add_tostring_tourl(js.map);
 					if (map_stats.result && map_stats.result.maps_encoded && map_stats.result.maps_encoded.length > 0) {
+						// assert: map_stats.result.maps_encoded == [ 0 ]
+						// js.map (index 1) should always be decoded
 						console.log('warning. svelte.compile received encoded script sourcemaps (index '+
 							map_stats.result.maps_encoded.join(', ')+'). '+
 							'this is slow. make your sourcemap-generators return decoded mappings '+
@@ -368,16 +370,16 @@ export default class Component {
 						);
 					}
 				}
+
 				if (css.map) {
 					css.map = combine_sourcemaps(
 						this.file,
-						[
-							css.map, // idx 1: internal
-							compile_options.sourcemap // idx 0: external: svelte.preprocess, etc
-						]
+						[ css.map, compile_options.sourcemap ]
 					) as RawSourceMap;
 					sourcemap_add_tostring_tourl(css.map);
 					if (map_stats.result && map_stats.result.maps_encoded && map_stats.result.maps_encoded.length > 0) {
+						// assert: map_stats.result.maps_encoded == [ 0 ]
+						// css.map (index 1) should always be decoded
 						console.log('warning. svelte.compile received encoded style sourcemaps (index '+
 							map_stats.result.maps_encoded.join(', ')+'). '+
 							'this is slow. make your sourcemap-generators return decoded mappings '+
@@ -388,16 +390,12 @@ export default class Component {
 			}
 
 			// encode mappings only once, after all sourcemaps are combined
-			if (js.map && typeof(js.map.mappings) == 'object') {
+			if (js.map && typeof js.map.mappings == 'object') {
 				(js.map as RawSourceMap).mappings = encode_mappings(js.map.mappings);
 			}
-			if (css.map && typeof(css.map.mappings) == 'object') {
+			if (css.map && typeof css.map.mappings == 'object') {
 				(css.map as RawSourceMap).mappings = encode_mappings(css.map.mappings);
 			}
-
-			// TODO css.map.version is undefined, should be 3 -> test sourcemaps/css is failing
-			// TODO verify js.map.version == 3
-
 		}
 
 		return {

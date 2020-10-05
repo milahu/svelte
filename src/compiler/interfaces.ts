@@ -113,6 +113,7 @@ export interface CompileOptions {
 	generate?: 'dom' | 'ssr' | false;
 
 	sourcemap?: object | string;
+	sourcemapEncodedWarn?: boolean;
 	outputFilename?: string;
 	cssOutputFilename?: string;
 	sveltePath?: string;

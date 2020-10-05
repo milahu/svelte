@@ -205,11 +205,9 @@ export function combine_sourcemaps(
 	if (map_stats) {
 		map_stats.result = {};
 		const { result } = map_stats;
-
 		const last_map_idx = sourcemap_list.length - 1;
 
 		// TODO allow to set options per preprocessor -> extend preprocessor config object
-		// some sourcemap-generators produce ultra-high-resolution sourcemaps (1 token = 1 character), so a high segment loss can be tolerable
 
 		// sourcemapEncodedWarn: show warning
 		// if preprocessors return sourcemaps with encoded mappings
@@ -217,7 +215,6 @@ export function combine_sourcemaps(
 
 		if (map_stats.sourcemapEncodedWarn) {
 			result.maps_encoded = [];
-
 			for (let map_idx = last_map_idx; map_idx >= 0; map_idx--) {
 				const map = sourcemap_list[map_idx];
 				if (typeof(map) == 'string') {
@@ -228,56 +225,6 @@ export function combine_sourcemaps(
 				}
 			}
 		}
-
-		// sourcemapWarnLoss: show warning if source files were lost
-		// disable warning with `svelte.preprocess(_, _, { sourcemapWarnLoss: false })`
-		// value 1  : never warn
-		// value 0.8: seldom warn
-		// value 0.5: average warn
-		// value 0.2: often warn
-		// value 0  : nonsense -> never warn
-		// -Infinity <= loss <= 1 and 0 < sourcemapWarnLoss <= 1
-
-		if (map_stats.sourcemapWarnLoss) {
-
-			// guess if segments were lost because of lowres sourcemaps
-			// assert: typeof(result) == 'object'
-			result.segments_per_map = [];
-			result.segment_loss_per_map = [];
-			result.segments_lost = false;
-
-			let last_num_segments;
-
-			for (let map_idx = last_map_idx; map_idx >= 0; map_idx--) {
-
-				const map = sourcemap_list[map_idx];
-				if (typeof(map) == 'string') {
-					sourcemap_list[map_idx] = JSON.parse(map);
-				}
-				if (typeof(map.mappings) == 'string') {
-					// do this before remapping to avoid double decoding
-					// remapping does not mutate its input data
-					map.mappings = decode_mappings(map.mappings);
-				}
-				let num_segments = 0;
-				for (const line of map.mappings) {
-					num_segments += line.length;
-				}
-				// get relative loss, compared to last map
-				const loss = map_idx == last_map_idx
-					? 0 : (last_num_segments - num_segments) / last_num_segments;
-				if (loss > map_stats.sourcemapWarnLoss) {
-					result.segments_lost = true;
-				}
-
-				 // chronological index
-				result.segment_loss_per_map.push(loss);
-				result.segments_per_map.push(num_segments);
-
-				last_num_segments = num_segments;
-			}
-		}
-
 	}
 
 	let map_idx = 1;
@@ -309,6 +256,8 @@ export function combine_sourcemaps(
 	if (do_decode_mappings) {
 		// explicitly decode mappings
 		// TODO remove this, when `remapping` allows to return decoded mappings, so we skip the unnecessary encode + decode steps
+		// https://github.com/ampproject/remapping/pull/88
+		// combine_sourcemaps should always return decoded mappings
 		(map as unknown as DecodedSourceMap).mappings = decode_mappings(map.mappings);
 	}
 
