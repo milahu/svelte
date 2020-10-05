@@ -1,4 +1,4 @@
-import { DecodedSourceMap, RawSourceMap, SourceMapSegment, SourceMapLoader } from '@ampproject/remapping/dist/types/types';
+import { DecodedSourceMap, RawSourceMap, SourceMapLoader } from '@ampproject/remapping/dist/types/types';
 import remapping from '@ampproject/remapping';
 import { decode as decode_mappings } from 'sourcemap-codec';
 
@@ -15,17 +15,21 @@ function last_line_length(s: string) {
 export function sourcemap_add_offset(
 	map: DecodedSourceMap, offset: SourceLocation
 ) {
+	if (map.mappings.length == 0) return map;
 	// shift columns in first line
-	const m = map.mappings;
-	m[0].forEach(seg => {
+	const segment_list = map.mappings[0];
+	for (let segment = 0; segment < segment_list.length; segment++) {
+		const seg = segment_list[segment];
 		if (seg[3]) seg[3] += offset.column;
-	});
+	}
 	// shift lines
-	m.forEach(line => {
-		line.forEach(seg => {
+	for (let line = 0; line < map.mappings.length; line++) {
+		const segment_list = map.mappings[line];
+		for (let segment = 0; segment < segment_list.length; segment++) {
+			const seg = segment_list[segment];
 			if (seg[2]) seg[2] += offset.line;
-		});
-	});
+		}
+	}
 }
 
 function merge_tables<T>(this_table: T[], other_table): [T[], number[], boolean, boolean] {
@@ -92,6 +96,8 @@ export class StringWithSourcemap {
 		const m1 = this.map;
 		const m2 = other.map;
 
+		if (m2.mappings.length == 0) return this;
+
 		// combine sources and names
 		const [sources, new_source_idx, sources_changed, sources_idx_changed] = merge_tables(m1.sources, m2.sources);
 		const [names, new_name_idx, names_changed, names_idx_changed] = merge_tables(m1.names, m2.names);
@@ -101,24 +107,30 @@ export class StringWithSourcemap {
 
 		// unswitched loops are faster
 		if (sources_idx_changed && names_idx_changed) {
-			m2.mappings.forEach(line => {
-				line.forEach(seg => {
+			for (let line = 0; line < m2.mappings.length; line++) {
+				const segment_list = m2.mappings[line];
+				for (let segment = 0; segment < segment_list.length; segment++) {
+					const seg = segment_list[segment];
 					if (seg[1]) seg[1] = new_source_idx[seg[1]];
 					if (seg[4]) seg[4] = new_name_idx[seg[4]];
-				});
-			});
+				}
+			}
 		} else if (sources_idx_changed) {
-			m2.mappings.forEach(line => {
-				line.forEach(seg => {
+			for (let line = 0; line < m2.mappings.length; line++) {
+				const segment_list = m2.mappings[line];
+				for (let segment = 0; segment < segment_list.length; segment++) {
+					const seg = segment_list[segment];
 					if (seg[1]) seg[1] = new_source_idx[seg[1]];
-				});
-			});
+				}
+			}
 		} else if (names_idx_changed) {
-			m2.mappings.forEach(line => {
-				line.forEach(seg => {
+			for (let line = 0; line < m2.mappings.length; line++) {
+				const segment_list = m2.mappings[line];
+				for (let segment = 0; segment < segment_list.length; segment++) {
+					const seg = segment_list[segment];
 					if (seg[4]) seg[4] = new_name_idx[seg[4]];
-				});
-			});
+				}
+			}
 		}
 
 		// combine the mappings
@@ -131,9 +143,10 @@ export class StringWithSourcemap {
 		const column_offset = last_line_length(this.string);
 		if (m2.mappings.length > 0 && column_offset > 0) {
 			// shift columns in first line
-			m2.mappings[0].forEach(seg => {
-				seg[0] += column_offset;
-			});
+			const first_line = m2.mappings[0];
+			for (let i = 0; i < first_line.length; i++) {
+				first_line[i][0] += column_offset;
+			}
 		}
 
 		// combine last line + first line
@@ -147,38 +160,39 @@ export class StringWithSourcemap {
 
 	static from_processed(string: string, map?: DecodedSourceMap): StringWithSourcemap {
 		if (map) return new StringWithSourcemap(string, map);
+		if (string == '') return new StringWithSourcemap();
 		map = { version: 3, names: [], sources: [], mappings: [] };
-		if (string == '') return new StringWithSourcemap(string, map);
 		// add empty SourceMapSegment[] for every line
-		const lineCount = string.split('\n').length;
-		map.mappings = Array.from({length: lineCount}).map(_ => []);
+		const line_count = (string.match(/\n/g) || '').length;
+		for (let i = 0; i < line_count; i++) map.mappings.push([]);
 		return new StringWithSourcemap(string, map);
 	}
 
 	static from_source(
-		source_file: string, source: string, offset_in_source?: SourceLocation
+		source_file: string, source: string, offset?: SourceLocation
 	): StringWithSourcemap {
-		const offset = offset_in_source || { line: 0, column: 0 };
+		if (!offset) offset = { line: 0, column: 0 };
 		const map: DecodedSourceMap = { version: 3, names: [], sources: [source_file], mappings: [] };
-		if (source.length == 0) return new StringWithSourcemap(source, map);
+		if (source == '') return new StringWithSourcemap(source, map);
 
 		// we create a high resolution identity map here,
 		// we know that it will eventually be merged with svelte's map,
 		// at which stage the resolution will decrease.
-		map.mappings = source.split("\n").map((line, line_idx) => {
-			let pos = 0;
-			const segs = line.split(/([^\d\w\s]|\s+)/g)
-				.filter(s => s !== "").map(s => {
-					const seg: SourceMapSegment = [
-						pos, 0,
-						line_idx + offset.line,
-						pos + (line_idx == 0 ? offset.column : 0) // shift first line
-					];
-					pos = pos + s.length;
-					return seg;
-				});
-			return segs;
-		});
+		const line_list = source.split('\n');
+		for (let line = 0; line < line_list.length; line++) {
+			map.mappings.push([]);
+			const token_list = line_list[line].split(/([^\d\w\s]|\s+)/g);
+			for (let token = 0, column = 0; token < token_list.length; token++) {
+				if (token_list[token] == '') continue;
+				map.mappings[line].push([ column, 0, offset.line + line, column ]);
+				column += token_list[token].length;
+			}
+		}
+		// shift columns in first line
+		const segment_list = map.mappings[0];
+		for (let segment = 0; segment < segment_list.length; segment++) {
+			segment_list[segment][3] += offset.column;
+		}
 		return new StringWithSourcemap(source, map);
 	}
 }
@@ -187,10 +201,7 @@ export type combine_sourcemaps_map_stats = {
 	sourcemapEncodedWarn?: boolean,
 	sourcemapWarnLoss?: number,
 	result?: {
-		maps_encoded?: number[],
-		segments_lost?: boolean
-		segment_loss_per_map?: number[],
-		segments_per_map?: number[],
+		maps_encoded?: number[]
 	}
 };
 
@@ -217,10 +228,10 @@ export function combine_sourcemaps(
 			result.maps_encoded = [];
 			for (let map_idx = last_map_idx; map_idx >= 0; map_idx--) {
 				const map = sourcemap_list[map_idx];
-				if (typeof(map) == 'string') {
+				if (typeof map == 'string') {
 					sourcemap_list[map_idx] = JSON.parse(map);
 				}
-				if (typeof(map.mappings) == 'string') {
+				if (typeof map.mappings == 'string') {
 					result.maps_encoded.push(last_map_idx - map_idx); // chronological index
 				}
 			}
