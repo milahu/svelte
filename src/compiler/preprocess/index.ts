@@ -1,7 +1,7 @@
 import { SourceMapInput, RawSourceMap, DecodedSourceMap } from '@ampproject/remapping/dist/types/types';
 import { decode as decode_mappings } from 'sourcemap-codec';
 import { getLocator } from 'locate-character';
-import { StringWithSourcemap, sourcemap_add_offset, combine_sourcemaps, combine_sourcemaps_map_stats } from '../utils/string_with_sourcemap';
+import { StringWithSourcemap, sourcemap_add_offset, combine_sourcemaps } from '../utils/string_with_sourcemap';
 
 export interface Processed {
 	code: string;
@@ -114,12 +114,11 @@ export default async function preprocess(
 	preprocessor: PreprocessorGroup | PreprocessorGroup[],
 	options?: {
 		filename?: string,
-		sourcemapEncodedWarn?: boolean // default true
+		sourcemapEncodedNoWarn?: boolean
 	}
 ) {
 	// @ts-ignore todo: doublecheck
 	const filename = (options && options.filename) || preprocessor.filename; // legacy
-	const sourcemapEncodedWarn = (options && options.sourcemapEncodedWarn != undefined) ? options.sourcemapEncodedWarn : true;
 
 	const dependencies = [];
 
@@ -224,28 +223,17 @@ export default async function preprocess(
 		sourcemap_list.unshift(res.map);
 	}
 
-	const map_stats: combine_sourcemaps_map_stats = {
-		sourcemapEncodedWarn
-		// property `result` is set by combine_sourcemaps
-	};
-
 	const map: DecodedSourceMap = combine_sourcemaps(
 		filename,
 		sourcemap_list,
-		map_stats,
-		true // explicitly decode mappings
-		// TODO remove this, when `remapping` allows to return decoded mappings, so we skip the unnecessary encode + decode steps
+		{
+			sourcemapEncodedNoWarn: options.sourcemapEncodedNoWarn,
+			caller_name: 'svelte.preprocess',
+			code_type: 'component' // TODO better. keep track of sourcemap-generators for easier debugging
+		}
 	) as DecodedSourceMap;
 
-	// TODO better than console.log?
-
-	if (map_stats.result && map_stats.result.maps_encoded && map_stats.result.maps_encoded.length > 0) {
-		console.log('warning. svelte.preprocess received encoded sourcemaps (index '+
-			map_stats.result.maps_encoded.join(', ')+'). '+
-			'this is slow. make your sourcemap-generators return decoded mappings '+
-			'or disable this warning with svelte.preprocess(_, _, { sourcemapEncodedWarn: false })'
-		);
-	}
+	// return decoded sourcemap to avoid unnecessary encode + decode steps
 
 	return {
 		// TODO return separated output, in future version where svelte.compile supports it:

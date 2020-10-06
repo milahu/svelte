@@ -58,7 +58,8 @@ describe("sourcemaps", () => {
 				sourcemap: preprocessed.map,
 				// filenames for sourcemaps
 				outputFilename: `${outputName}.js`,
-				cssOutputFilename: `${outputName}.css`
+				cssOutputFilename: `${outputName}.css`,
+				...(config.compile_options || {})
 			});
 
 			js.code = js.code.replace(
@@ -125,7 +126,8 @@ describe("sourcemaps", () => {
 			css.locate = getLocator(css.code || '');
 			css.locate_1 = getLocator(css.code || '', { offsetLine: 1 });
 
-			test({ assert, input, preprocessed, js, css });
+			const testRes = test({ assert, input, preprocessed, js, css });
+			Promise.resolve(testRes);
 		});
 	});
 });

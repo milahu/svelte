@@ -1,7 +1,5 @@
 import { Node, Program } from "estree";
-
-// eslint-disable-next-line import/named
-import { DecodedSourceMap } from 'magic-string';
+import { RawSourceMap } from '@ampproject/remapping/dist/types/types';
 
 interface BaseNode {
 	start: number;
@@ -113,7 +111,7 @@ export interface CompileOptions {
 	generate?: 'dom' | 'ssr' | false;
 
 	sourcemap?: object | string;
-	sourcemapEncodedWarn?: boolean;
+	sourcemapEncodedNoWarn?: boolean;
 	outputFilename?: string;
 	cssOutputFilename?: string;
 	sveltePath?: string;
@@ -170,5 +168,5 @@ export interface Var {
 
 export interface CssResult { 
 	code: string;
-	map: DecodedSourceMap;
+	map: RawSourceMap;
 }

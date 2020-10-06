@@ -2,6 +2,7 @@ export function test({ assert, preprocessed, js }) {
 
 	assert.equal(preprocessed.error, undefined);
 
+	// TODO make util fn + move to test index.js
 	// sourcemap stores location only for 'answer = 42;'
 	// not for 'var answer = 42;'
 	[

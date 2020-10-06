@@ -6,6 +6,7 @@ import { Ast } from '../../interfaces';
 import Component from '../Component';
 import { CssNode } from './interfaces';
 import hash from '../utils/hash';
+import { RawSourceMap } from '@ampproject/remapping/dist/types/types';
 
 function remove_css_prefix(name: string): string {
 	return name.replace(/^-((webkit)|(moz)|(o)|(ms))-/, '');
@@ -410,11 +411,19 @@ export default class Stylesheet {
 
 		return {
 			code: code.toString(),
-			map: code.generateDecodedMap({
-				includeContent: true,
-				source: this.filename,
-				file
-			})
+				// TODO remove workaround
+				// magic-string should return decoded maps with version
+				map: Object.assign(
+					code.generateDecodedMap({
+						includeContent: true,
+						source: this.filename,
+						file
+					}),
+					{ version: 3 }
+				) as unknown as RawSourceMap
+				// type cast: magic-string -> remapping
+				// RawSourceMap is the end result type
+				// DecodedSourceMap is only temporary type
 		};
 	}
 

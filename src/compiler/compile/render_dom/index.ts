@@ -7,6 +7,7 @@ import { extract_names, Scope } from '../utils/scope';
 import { invalidate } from './invalidate';
 import Block from './Block';
 import { ClassDeclaration, FunctionExpression, Node, Statement, ObjectExpression, Expression } from 'estree';
+import { finalize_sourcemap } from '../../utils/string_with_sourcemap';
 
 export default function dom(
 	component: Component,
@@ -31,11 +32,10 @@ export default function dom(
 
 	const css = component.stylesheet.render(options.filename, !options.customElement);
 
-	// TODO fix css.map.toUrl - stylesheet.render returns decoded mappings, map.toUrl needs encoded mappings
-	// TODO use combined css.map? see compile/Component.ts
+	finalize_sourcemap(css, 'style', component.file, options);
+
 	const styles = component.stylesheet.has_styles && options.dev
-		//? `${css.code}\n/*# sourceMappingURL=${css.map.toUrl()} */`
-		? `${css.code}\n/*# sourceMappingURL=TODO_FIXME */`
+		? `${css.code}\n/*# sourceMappingURL=${(css.map as any).toUrl()} */`
 		: css.code;
 
 	const add_css = component.get_unique_name('add_css');
@@ -471,15 +471,12 @@ export default function dom(
 	}
 
 	if (options.customElement) {
-		// TODO use combined css.map? see compile/Component.ts
-		// TODO css.map.toUrl needs encoded mappings
-		//			${css.code && b`this.shadowRoot.innerHTML = \`<style>${css.code.replace(/\\/g, '\\\\')}${options.dev ? `\n/*# sourceMappingURL=${css.map.toUrl()} */` : ''}</style>\`;`}
 		const declaration = b`
 			class ${name} extends @SvelteElement {
 				constructor(options) {
 					super();
 
-					${css.code && b`this.shadowRoot.innerHTML = \`<style>${css.code.replace(/\\/g, '\\\\')}${options.dev ? `\n/*# sourceMappingURL=TODO_FIXME */` : ''}</style>\`;`}
+					${css.code && b`this.shadowRoot.innerHTML = \`<style>${css.code.replace(/\\/g, '\\\\')}${options.dev && css.map ? `\n/*# sourceMappingURL=${(css.map as any).toUrl()} */` : ''}</style>\`;`}
 
 					@init(this, { target: this.shadowRoot }, ${definition}, ${has_create_fragment ? 'create_fragment': 'null'}, ${not_equal}, ${prop_indexes}, ${dirty});
 

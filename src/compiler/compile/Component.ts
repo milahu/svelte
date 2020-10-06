@@ -30,9 +30,7 @@ import check_graph_for_cycles from './utils/check_graph_for_cycles';
 import { print, x, b } from 'code-red';
 import { is_reserved_keyword } from './utils/reserved_keywords';
 import Element from './nodes/Element';
-import { combine_sourcemaps, sourcemap_add_tostring_tourl, combine_sourcemaps_map_stats } from '../utils/string_with_sourcemap';
-import { RawSourceMap } from '@ampproject/remapping/dist/types/types';
-import { encode as encode_mappings, decode as decode_mappings } from 'sourcemap-codec';
+import { finalize_sourcemap } from '../utils/string_with_sourcemap';
 
 
 interface ComponentOptions {
@@ -323,19 +321,9 @@ export default class Component {
 				? { code: null, map: null }
 				: result.css; // css.map.mappings are decoded
 
-			// TODO remove workaround. type DecodedMappings of magic-string should have version - required by SourceMapConsumer
-			if (css.map) (css.map as any).version = 3;
-
 			js = print(program, {
 				sourceMapSource: compile_options.filename
 			});
-
-			// TODO remove workaround
-			// js.map.mappings should be decoded
-			// https://github.com/Rich-Harris/code-red/issues/50
-			if (js.map && typeof (js.map as any).mappings == 'string') {
-				(js.map as any).mappings = decode_mappings((js.map as any).mappings);
-			}
 
 			js.map.sources = [
 				compile_options.filename ? get_relative_path(compile_options.outputFilename || '', compile_options.filename) : null
@@ -345,57 +333,7 @@ export default class Component {
 				this.source
 			];
 
-			// combine sourcemaps
-			if (compile_options.sourcemap) {
-				const sourcemapEncodedWarn = (compile_options.sourcemapEncodedWarn != undefined) ? compile_options.sourcemapEncodedWarn : true;
-				const map_stats: combine_sourcemaps_map_stats = {
-					sourcemapEncodedWarn
-					// property `result` is set by combine_sourcemaps
-				};
-
-				if (js.map) {
-					js.map = combine_sourcemaps(
-						this.file,
-						[ js.map, compile_options.sourcemap ],
-						map_stats
-					) as RawSourceMap;
-					sourcemap_add_tostring_tourl(js.map);
-					if (map_stats.result && map_stats.result.maps_encoded && map_stats.result.maps_encoded.length > 0) {
-						// assert: map_stats.result.maps_encoded == [ 0 ]
-						// js.map (index 1) should always be decoded
-						console.log('warning. svelte.compile received encoded script sourcemaps (index '+
-							map_stats.result.maps_encoded.join(', ')+'). '+
-							'this is slow. make your sourcemap-generators return decoded mappings '+
-							'or disable this warning with svelte.compile(_, _, { sourcemapEncodedWarn: false })'
-						);
-					}
-				}
-
-				if (css.map) {
-					css.map = combine_sourcemaps(
-						this.file,
-						[ css.map, compile_options.sourcemap ]
-					) as RawSourceMap;
-					sourcemap_add_tostring_tourl(css.map);
-					if (map_stats.result && map_stats.result.maps_encoded && map_stats.result.maps_encoded.length > 0) {
-						// assert: map_stats.result.maps_encoded == [ 0 ]
-						// css.map (index 1) should always be decoded
-						console.log('warning. svelte.compile received encoded style sourcemaps (index '+
-							map_stats.result.maps_encoded.join(', ')+'). '+
-							'this is slow. make your sourcemap-generators return decoded mappings '+
-							'or disable this warning with svelte.compile(_, _, { sourcemapEncodedWarn: false })'
-						);
-					}
-				}
-			}
-
-			// encode mappings only once, after all sourcemaps are combined
-			if (js.map && typeof js.map.mappings == 'object') {
-				(js.map as RawSourceMap).mappings = encode_mappings(js.map.mappings);
-			}
-			if (css.map && typeof css.map.mappings == 'object') {
-				(css.map as RawSourceMap).mappings = encode_mappings(css.map.mappings);
-			}
+			finalize_sourcemap(js, 'script', this.file, compile_options);
 		}
 
 		return {

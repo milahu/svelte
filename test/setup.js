@@ -18,7 +18,7 @@ require.extensions['.js'] = function(module, filename) {
 			return `var {${default_name}${names}} = require(${quote}${source}${quote});`;
 		})
 		.replace(/^export\s+default\s+/gm, 'exports.default = ')
-		.replace(/^export\s+(const|let|var|class|function)\s+(\w+)/gm, (match, type, name) => {
+		.replace(/^export\s+(const|let|var|class|function|async\s+function)\s+(\w+)/gm, (match, type, name) => {
 			exports.push(name);
 			return `${type} ${name}`;
 		})

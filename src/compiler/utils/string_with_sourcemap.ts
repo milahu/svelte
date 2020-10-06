@@ -1,6 +1,6 @@
 import { DecodedSourceMap, RawSourceMap, SourceMapLoader } from '@ampproject/remapping/dist/types/types';
 import remapping from '@ampproject/remapping';
-import { decode as decode_mappings } from 'sourcemap-codec';
+import { decode as decode_mappings, encode as encode_mappings } from 'sourcemap-codec';
 
 type SourceLocation = {
 	line: number;
@@ -197,44 +197,40 @@ export class StringWithSourcemap {
 	}
 }
 
-export type combine_sourcemaps_map_stats = {
-	sourcemapEncodedWarn?: boolean,
-	sourcemapWarnLoss?: number,
-	result?: {
-		maps_encoded?: number[]
-	}
-};
-
 export function combine_sourcemaps(
 	filename: string,
 	sourcemap_list: Array<DecodedSourceMap | RawSourceMap>,
-	map_stats?: combine_sourcemaps_map_stats,
-	do_decode_mappings?: boolean
+	options?: {
+		sourcemapEncodedNoWarn?: boolean,
+		caller_name?: string,
+		code_type?: string, // style, script, markup
+		encode_mappings?: boolean
+	}
 ): (RawSourceMap | DecodedSourceMap) {
 	if (sourcemap_list.length == 0) return null;
+	const last_map_idx = sourcemap_list.length - 1;
 
-	if (map_stats) {
-		map_stats.result = {};
-		const { result } = map_stats;
-		const last_map_idx = sourcemap_list.length - 1;
-
-		// TODO allow to set options per preprocessor -> extend preprocessor config object
-
-		// sourcemapEncodedWarn: show warning
-		// if preprocessors return sourcemaps with encoded mappings
-		// we need decoded mappings, so that is a waste of time
-
-		if (map_stats.sourcemapEncodedWarn) {
-			result.maps_encoded = [];
-			for (let map_idx = last_map_idx; map_idx >= 0; map_idx--) {
-				const map = sourcemap_list[map_idx];
-				if (typeof map == 'string') {
-					sourcemap_list[map_idx] = JSON.parse(map);
-				}
-				if (typeof map.mappings == 'string') {
-					result.maps_encoded.push(last_map_idx - map_idx); // chronological index
-				}
+	if (options && !options.sourcemapEncodedNoWarn) {
+		// show warning if preprocessors return sourcemaps with encoded mappings
+		// we need decoded mappings, encode + decode is a waste of time
+		const maps_encoded = [];
+		for (let map_idx = last_map_idx; map_idx >= 0; map_idx--) {
+			const map = sourcemap_list[map_idx];
+			if (typeof map == 'string') {
+				sourcemap_list[map_idx] = JSON.parse(map);
 			}
+			if (typeof map.mappings == 'string') {
+				maps_encoded.push(last_map_idx - map_idx); // chronological index
+			}
+		}
+		if (maps_encoded.length > 0) {
+			// TODO better than console.log?
+			console.log(
+				'warning. '+options.caller_name+
+				' received encoded '+options.code_type+' sourcemaps (index '+maps_encoded.join(', ')+'). '+
+				'this is slow. make your sourcemap-generators return decoded mappings '+
+				'or disable this warning with the option { sourcemapEncodedNoWarn: true }'
+			);
 		}
 	}
 
@@ -262,32 +258,74 @@ export function combine_sourcemaps(
 					true
 				);
 
-	if (!map.file) delete map.file; // skip optional field `file`
-
-	if (do_decode_mappings) {
-		// explicitly decode mappings
+	if (options && options.encode_mappings) {
+		if (typeof map.mappings == 'object')
+			(map as unknown as RawSourceMap).mappings = encode_mappings((map as unknown as DecodedSourceMap).mappings);
+	} else {
+		// decode mappings
 		// TODO remove this, when `remapping` allows to return decoded mappings, so we skip the unnecessary encode + decode steps
 		// https://github.com/ampproject/remapping/pull/88
 		// combine_sourcemaps should always return decoded mappings
-		(map as unknown as DecodedSourceMap).mappings = decode_mappings(map.mappings);
+		if (typeof map.mappings == 'string')
+			(map as unknown as DecodedSourceMap).mappings = decode_mappings((map as unknown as RawSourceMap).mappings);
 	}
 
 	return map;
 }
 
+// browser vs node.js
+const b64enc = typeof btoa == 'function' ? btoa : b => Buffer.from(b).toString('base64');
+
 export function sourcemap_add_tostring_tourl(map) {
-	Object.defineProperties(map, {
-		toString: {
+	if (!map) return;
+	if (!map.toString)
+		Object.defineProperty(map, 'toString', {
 			enumerable: false,
 			value: function toString() {
 				return JSON.stringify(this);
 			}
-		},
-		toUrl: {
+		});
+	if (!map.toUrl)
+		Object.defineProperty(map, 'toUrl', {
 			enumerable: false,
 			value: function toUrl() {
-				return 'data:application/json;charset=utf-8;base64,' + btoa(this.toString());
+				return 'data:application/json;charset=utf-8;base64,' + b64enc(this.toString());
 			}
+		});
+}
+
+export function sourcemap_encode_mappings(map) {
+	if (map && typeof map.mappings == 'object') {
+		(map as RawSourceMap).mappings = encode_mappings(map.mappings);
+	}
+}
+
+export function finalize_sourcemap(result, code_type: string, filename: string, options, caller_name = 'svelte.compile') {
+	if (result.map) {
+		if (options.sourcemap) {
+
+			// TODO remove workaround
+			// code-red/print should return decoded sourcemaps
+			// https://github.com/Rich-Harris/code-red/pull/51
+			if (typeof result.map.mappings == 'string') {
+				result.map.mappings = decode_mappings(result.map.mappings);
+			}
+
+			(result.map as unknown as DecodedSourceMap) = combine_sourcemaps(
+				filename,
+				[
+					(result.map as any), // idx 1
+					options.sourcemap as DecodedSourceMap // idx 0
+				],
+				{
+					caller_name,
+					code_type,
+					sourcemapEncodedNoWarn: options.sourcemapEncodedNoWarn
+				}
+			) as DecodedSourceMap;
 		}
-	});
+		// encode mappings only once, after all sourcemaps are combined
+		sourcemap_encode_mappings(result.map);
+		sourcemap_add_tostring_tourl(result.map);
+	}
 }

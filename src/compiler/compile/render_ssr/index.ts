@@ -6,6 +6,7 @@ import Renderer from './Renderer';
 import { INode as TemplateNode } from '../nodes/interfaces'; // TODO
 import Text from '../nodes/Text';
 import { LabeledStatement, Statement, Node } from 'estree';
+import { finalize_sourcemap } from '../../utils/string_with_sourcemap';
 
 export default function ssr(
 	component: Component,
@@ -25,10 +26,11 @@ export default function ssr(
 	// TODO put this inside the Renderer class
 	const literal = renderer.pop();
 
-	// TODO concatenate CSS maps
 	const css = options.customElement ?
 		{ code: null, map: null } :
 		component.stylesheet.render(options.filename, true);
+
+	finalize_sourcemap(css, 'style', component.file, options);
 
 	const uses_rest = component.var_lookup.has('$$restProps');
 	const props = component.vars.filter(variable => !variable.module && variable.export_name);
@@ -137,7 +139,6 @@ export default function ssr(
 		main
 	].filter(Boolean);
 
-	// TODO use combined css.map? see compile/Component.ts
 	const js = b`
 		${css.code ? b`
 		const #css = {
