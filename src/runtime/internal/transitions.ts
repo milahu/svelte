@@ -53,6 +53,9 @@ export function transition_out(block, local: 0 | 1, detach?: 0 | 1, callback?) {
 		if (outroing.has(block)) return;
 		outroing.add(block);
 
+		// outros can be undefined
+		if (!outros) return block.o(local);
+
 		outros.c.push(() => {
 			outroing.delete(block);
 			if (callback) {
