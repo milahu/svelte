@@ -1468,6 +1468,10 @@ function process_component_options(component: Component, nodes) {
 }
 
 function get_relative_path(from: string, to: string) {
+
+	// to is absolute path? ignore from
+	if (to.slice(0, 8) == 'file:///') return to;
+
 	const from_parts = from.split(/[/\\]/);
 	const to_parts = to.split(/[/\\]/);
 
